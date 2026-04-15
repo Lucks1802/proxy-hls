@@ -1,12 +1,12 @@
 {
-  "name": "proxy-hls",
-  "version": "1.0.0",
-  "main": "proxy-hls.js",
-  "scripts": {
-    "start": "node proxy-hls.js"
+  "name":"proxy-hls",
+  "version":"1.0.0",
+  "main":"proxy-hls.js",
+  "scripts":{
+    "start":"node proxy-hls.js"
   },
-  "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.2"
+  "dependencies":{
+    "express":"^4.18.2",
+    "axios":"^1.6.2"
   }
 }
