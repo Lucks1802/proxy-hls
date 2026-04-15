@@ -13,7 +13,7 @@ app.get('/proxy', async (req, res) => {
     let url = req.query.url;
     if (!url) return res.status(400).send('No URL');
 
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
     const hash = Buffer.from(url).toString('base64').replace(/=/g, '');
     const cacheFile = path.join(CACHE_DIR, hash + '.m3u8');
@@ -24,9 +24,9 @@ app.get('/proxy', async (req, res) => {
             content = fs.readFileSync(cacheFile,'utf8');
         } else {
             const resp = await axios.get(url, {
-                headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': '*/*' },
-                responseType: 'text',
-                timeout: 10000
+                headers: {'User-Agent':'Mozilla/5.0','Accept':'*/*'},
+                responseType:'text',
+                timeout:10000
             });
             content = resp.data;
             fs.writeFileSync(cacheFile, content);
@@ -39,4 +39,4 @@ app.get('/proxy', async (req, res) => {
     }
 });
 
-app.listen(PORT, ()=> console.log(`HLS Proxy corriendo en puerto ${PORT}`));
+app.listen(PORT,()=>console.log(`HLS Proxy corriendo en puerto ${PORT}`));
