@@ -5,7 +5,7 @@ const PORT = process.env.PORT || 3000;
 
 app.get('/proxy', async (req, res) => {
     const url = req.query.url;
-    if (!url) return res.status(400).send('Falta la URL');
+    if (!url) return res.status(400).send('No URL');
 
     try {
         const response = await axios.get(url, {
@@ -14,36 +14,32 @@ app.get('/proxy', async (req, res) => {
                 'Referer': 'https://prepublish.f.qaotic.net/',
                 'Origin': 'https://prepublish.f.qaotic.net'
             },
-            responseType: url.includes('.m3u8') ? 'text' : 'arraybuffer',
-            timeout: 12000
+            responseType: 'text', // Solo pedimos texto (el m3u8)
+            timeout: 10000
         });
 
-        // Si es una playlist, reescribimos los links internos
+        res.set('Content-Type', 'application/vnd.apple.mpegurl');
+        res.set('Access-Control-Allow-Origin', '*');
+
+        let content = response.data;
+
+        // Si la lista tiene links relativos, los hacemos absolutos pero SIN pasar por el proxy los fragmentos .ts
+        // Esto hace que el video cargue mucho más rápido.
         if (url.includes('.m3u8')) {
-            res.set('Content-Type', 'application/vnd.apple.mpegurl');
             const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-            
-            let content = response.data;
-            const lines = content.split('\n');
-            const newLines = lines.map(line => {
+            content = content.split('\n').map(line => {
                 if (line.startsWith('#') || line.trim() === '') return line;
-                
-                let fullUrl = line.startsWith('http') ? line : baseUrl + line;
-                // Hacemos que cada segmento pase de nuevo por este proxy
-                return `https://proxy-hls-gers.onrender.com/proxy?url=${encodeURIComponent(fullUrl)}`;
-            });
-            
-            return res.send(newLines.join('\n'));
+                if (line.startsWith('http')) return line;
+                return baseUrl + line;
+            }).join('\n');
         }
 
-        // Si es un segmento de video (.ts), lo enviamos tal cual
-        res.set('Content-Type', 'video/mp2t');
-        res.send(response.data);
+        res.send(content);
 
     } catch (e) {
-        console.error('Error en el canal:', url, e.message);
-        res.status(500).send('Error cargando el segmento');
+        console.error('Error:', e.message);
+        res.status(500).send('Error de conexion con el canal');
     }
 });
 
-app.listen(PORT, () => console.log(`Proxy activo en puerto ${PORT}`));
+app.listen(PORT);
