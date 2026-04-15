@@ -1,57 +1,49 @@
 const express = require('express');
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Carpeta cache para fragmentos HLS
-const CACHE_DIR = path.join(__dirname,'cache');
-if(!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR);
+app.get('/proxy', async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.status(400).send('Falta la URL');
 
-app.get('/proxy', async (req,res)=>{
-    let url = req.query.url;
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://prepublish.f.qaotic.net/',
+                'Origin': 'https://prepublish.f.qaotic.net'
+            },
+            responseType: url.includes('.m3u8') ? 'text' : 'arraybuffer',
+            timeout: 12000
+        });
 
-    if(!url) return res.status(400).send('No URL');
-
-    // Asegurar HTTPS
-    if(!/^https?:\/\//i.test(url)) url='https://'+url;
-
-    // Hash para cache
-    const hash = Buffer.from(url).toString('base64').replace(/=/g,'');
-    const cacheFile = path.join(CACHE_DIR, hash+'.m3u8');
-
-    try{
-        let content;
-
-        // Leer de cache si existe y es reciente (<60s)
-        if(fs.existsSync(cacheFile) && (Date.now()-fs.statSync(cacheFile).mtimeMs)<60000){
-            content = fs.readFileSync(cacheFile,'utf8');
-        } else {
-            // Descargar HLS con headers para URLs restringidas
-            const resp = await axios.get(url,{
-                headers:{
-                    'User-Agent':'Mozilla/5.0',
-                    'Accept':'*/*',
-                    'Referer':'https://prepublish.f.qaotic.net/',
-                    'Origin':'https://prepublish.f.qaotic.net'
-                },
-                responseType:'text',
-                timeout:15000
+        // Si es una playlist, reescribimos los links internos
+        if (url.includes('.m3u8')) {
+            res.set('Content-Type', 'application/vnd.apple.mpegurl');
+            const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+            
+            let content = response.data;
+            const lines = content.split('\n');
+            const newLines = lines.map(line => {
+                if (line.startsWith('#') || line.trim() === '') return line;
+                
+                let fullUrl = line.startsWith('http') ? line : baseUrl + line;
+                // Hacemos que cada segmento pase de nuevo por este proxy
+                return `https://proxy-hls-gers.onrender.com/proxy?url=${encodeURIComponent(fullUrl)}`;
             });
-            content = resp.data;
-            fs.writeFileSync(cacheFile,content);
+            
+            return res.send(newLines.join('\n'));
         }
 
-        // Entregar playlist HLS
-        res.set('Content-Type','application/vnd.apple.mpegurl');
-        res.send(content);
+        // Si es un segmento de video (.ts), lo enviamos tal cual
+        res.set('Content-Type', 'video/mp2t');
+        res.send(response.data);
 
-    }catch(e){
-        console.error('Error fetching channel:',url,e.message);
-        res.status(500).send('Error fetching channel');
+    } catch (e) {
+        console.error('Error en el canal:', url, e.message);
+        res.status(500).send('Error cargando el segmento');
     }
 });
 
-app.listen(PORT,()=>console.log(`HLS Proxy corriendo en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`Proxy activo en puerto ${PORT}`));
